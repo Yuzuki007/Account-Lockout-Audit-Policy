@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Account Lockout & Audit Policy — Windows Server 2022</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;700;800&family=Figtree:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:      #f8f4f0;
+      --bg2:     #f0ebe4;
+      --panel:   #ffffff;
+      --border:  #e0d5c8;
+      --accent:  #7F3030;
+      --accent2: #a84040;
+      --accent3: #2d6a4f;
+      --warn:    #b45309;
+      --danger:  #c0392b;
+      --text:    #1a1008;
+      --muted:   #7a6555;
+      --mono:    'JetBrains Mono', monospace;
+      --sans:    'Figtree', sans-serif;
+      --shadow:  0 2px 16px rgba(127,48,48,0.08);
+      --shadow-lg: 0 8px 40px rgba(127,48,48,0.13);
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content:''; position:fixed; inset:0;
+      background-image: radial-gradient(circle, rgba(127,48,48,0.05) 1px, transparent 1px);
+      background-size: 30px 30px;
+      pointer-events:none; z-index:0;
+    }
+
+    /* HERO */
+    .hero {
+      position:relative; z-index:1;
+      min-height:100vh; display:flex;
+      flex-direction:column; justify-content:center;
+      padding:0 8vw; overflow:hidden;
+    }
+
+    .blob { position:absolute; border-radius:50%; filter:blur(90px); opacity:0.13; pointer-events:none; }
+    .blob-1 { width:500px; height:500px; background:var(--accent); top:-100px; right:-100px; }
+    .blob-2 { width:300px; height:300px; background:#8B0000; bottom:60px; left:-60px; }
+
+    .eyebrow {
+      font-family:var(--mono); font-size:11px;
+      letter-spacing:3px; text-transform:uppercase;
+      color:var(--accent); margin-bottom:1.4rem;
+      display:flex; align-items:center; gap:10px;
+      animation:fadeUp 0.5s ease both;
+    }
+    .eyebrow::before { content:''; width:28px; height:2px; background:var(--accent); border-radius:2px; }
+
+    h1 {
+      font-family:'Syne', var(--sans);
+      font-size:clamp(2.4rem,5.5vw,5rem);
+      font-weight:800; line-height:1.05;
+      letter-spacing:-2px; color:var(--text);
+      margin-bottom:1.4rem;
+      animation:fadeUp 0.5s ease 0.1s both;
+    }
+    h1 em { font-style:normal; color:var(--accent); }
+
+    .hero-desc {
+      font-size:1.05rem; color:var(--muted);
+      max-width:560px; line-height:1.75;
+      margin-bottom:2rem;
+      animation:fadeUp 0.5s ease 0.2s both;
+    }
+
+    .badge-row { display:flex; flex-wrap:wrap; gap:8px; animation:fadeUp 0.5s ease 0.3s both; }
+    .badge { font-family:var(--mono); font-size:11px; padding:4px 12px; border-radius:4px; border:1.5px solid; font-weight:500; }
+    .badge-red   { color:var(--accent);  border-color:var(--accent);  background:rgba(127,48,48,0.07); }
+    .badge-green { color:var(--accent3); border-color:var(--accent3); background:rgba(45,106,79,0.07); }
+    .badge-amber { color:var(--warn);    border-color:var(--warn);    background:rgba(180,83,9,0.07); }
+
+    /* LAYOUT */
+    .divider { border:none; border-top:1.5px solid var(--border); margin:0 8vw; }
+    section { position:relative; z-index:1; padding:5.5rem 8vw; }
+    .stripe { background:var(--bg2); position:relative; z-index:1; padding:1px 0; }
+
+    .sec-eyebrow {
+      font-family:var(--mono); font-size:11px;
+      letter-spacing:3px; text-transform:uppercase;
+      color:var(--accent); margin-bottom:0.8rem;
+      display:flex; align-items:center; gap:8px;
+    }
+    .sec-eyebrow::before { content:''; width:16px; height:2px; background:var(--accent); border-radius:2px; }
+
+    h2 {
+      font-family:'Syne', var(--sans);
+      font-size:clamp(1.7rem,3vw,2.4rem);
+      font-weight:700; letter-spacing:-1px;
+      color:var(--text); margin-bottom:2.8rem;
+    }
+
+    /* TABLE */
+    .table-wrap { border:1.5px solid var(--border); border-radius:10px; overflow:hidden; box-shadow:var(--shadow); }
+    .env-table { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:13px; }
+    .env-table tr { border-bottom:1px solid var(--border); }
+    .env-table tr:last-child { border-bottom:none; }
+    .env-table tr:hover td { background:var(--bg2); }
+    .env-table td { padding:13px 20px; background:var(--panel); transition:background 0.15s; }
+    .env-table td:first-child { color:var(--muted); width:220px; border-right:1px solid var(--border); }
+    .env-table td:last-child { color:var(--accent); font-weight:500; }
+
+    /* CHECKLIST */
+    .checklist { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:1px; background:var(--border); border:1.5px solid var(--border); border-radius:10px; overflow:hidden; box-shadow:var(--shadow); }
+    .check-item { background:var(--panel); padding:1.1rem 1.4rem; display:flex; align-items:center; gap:12px; transition:background 0.15s; }
+    .check-item:hover { background:var(--bg2); }
+    .check-icon { width:22px; height:22px; border-radius:50%; background:rgba(45,106,79,0.1); border:1.5px solid var(--accent3); color:var(--accent3); display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; font-weight:700; }
+    .check-text { font-size:14px; color:var(--text); }
+
+    /* AUDIT CARDS */
+    .audit-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:1rem; }
+    .audit-card { background:var(--panel); border:1.5px solid var(--border); border-radius:12px; overflow:hidden; box-shadow:var(--shadow); transition:all 0.25s; }
+    .audit-card:hover { transform:translateY(-3px); box-shadow:var(--shadow-lg); border-color:var(--accent); }
+    .audit-header { padding:12px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; background:rgba(127,48,48,0.04); }
+    .audit-icon { font-size:1.3rem; }
+    .audit-title { font-weight:600; font-size:14px; color:var(--text); }
+    .audit-body { padding:16px 18px; }
+    .audit-before { font-family:var(--mono); font-size:11px; color:var(--danger); margin-bottom:6px; }
+    .audit-after  { font-family:var(--mono); font-size:11px; color:var(--accent3); }
+
+    /* EVENT ID TABLE */
+    .event-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .event-table th { background:var(--accent); color:#fff; padding:12px 16px; font-family:var(--mono); font-size:11px; letter-spacing:1px; text-align:left; }
+    .event-table td { padding:12px 16px; border-bottom:1px solid var(--border); background:var(--panel); transition:background 0.15s; }
+    .event-table tr:last-child td { border-bottom:none; }
+    .event-table tr:hover td { background:var(--bg2); }
+    .event-id { font-family:var(--mono); font-weight:700; color:var(--accent); }
+    .sev-high { color:var(--danger); font-weight:700; font-size:12px; }
+    .sev-warn { color:var(--warn);   font-weight:700; font-size:12px; }
+    .sev-info { color:var(--accent3); font-weight:700; font-size:12px; }
+
+    /* CODE */
+    .code-block { background:#1a0f0f; border:1.5px solid #3a1a1a; border-radius:8px; overflow:hidden; margin:1rem 0; box-shadow:var(--shadow); }
+    .code-header { background:#2a1212; border-bottom:1px solid #3a1a1a; padding:8px 16px; display:flex; align-items:center; justify-content:space-between; }
+    .code-lang { font-family:var(--mono); font-size:10px; color:#8a5a5a; letter-spacing:1.5px; text-transform:uppercase; }
+    .code-dots { display:flex; gap:6px; }
+    .code-dots span { width:10px; height:10px; border-radius:50%; }
+    .dot-r{background:#ef4444;}.dot-y{background:#f59e0b;}.dot-g{background:#10b981;}
+    pre { padding:1.2rem 1.5rem; font-family:var(--mono); font-size:12.5px; line-height:1.85; color:#c4a882; overflow-x:auto; }
+    pre .kw  { color:#e07070; }
+    pre .str { color:#7ecba1; }
+    pre .cm  { color:#5a3a3a; font-style:italic; }
+    pre .var { color:#e0a070; }
+    pre .val { color:#70a0e0; }
+
+    /* RESULT BOX */
+    .result-box { background:rgba(45,106,79,0.06); border:1.5px solid rgba(45,106,79,0.25); border-radius:8px; padding:1rem 1.4rem; font-family:var(--mono); font-size:12.5px; color:var(--accent3); line-height:1.9; }
+    .result-label { font-size:10px; letter-spacing:2px; color:var(--accent3); margin-bottom:6px; opacity:0.7; }
+
+    .warn-box { background:rgba(192,57,43,0.06); border:1.5px solid rgba(192,57,43,0.25); border-radius:8px; padding:1rem 1.4rem; font-family:var(--mono); font-size:12.5px; color:var(--danger); line-height:1.9; margin:1rem 0; }
+    .warn-label { font-size:10px; letter-spacing:2px; color:var(--danger); margin-bottom:6px; opacity:0.7; }
+
+    /* WORKFLOW */
+    .workflow { display:flex; flex-direction:column; gap:0; }
+    .wf-step { display:grid; grid-template-columns:60px 1fr; }
+    .wf-left { display:flex; flex-direction:column; align-items:center; padding-top:2px; }
+    .wf-num { width:36px; height:36px; border-radius:50%; background:var(--panel); border:2px solid var(--accent); color:var(--accent); font-family:var(--mono); font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; z-index:1; }
+    .wf-line { width:2px; flex:1; background:var(--border); margin:8px 0; min-height:20px; }
+    .wf-content { padding:0 0 2rem 1.5rem; }
+    .wf-title { font-size:1rem; font-weight:600; color:var(--text); margin-bottom:4px; }
+    .wf-desc { font-size:13px; color:var(--muted); line-height:1.6; }
+
+    /* BEFORE/AFTER */
+    .ba-grid { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; }
+    .ba-card { background:var(--panel); border:1.5px solid var(--border); border-radius:10px; overflow:hidden; box-shadow:var(--shadow); }
+    .ba-header { padding:10px 16px; border-bottom:1px solid var(--border); font-family:var(--mono); font-size:12px; font-weight:700; }
+    .ba-header.before { background:rgba(192,57,43,0.08); color:var(--danger); }
+    .ba-header.after  { background:rgba(45,106,79,0.08); color:var(--accent3); }
+    .ba-body { padding:16px; font-family:var(--mono); font-size:13px; line-height:2; }
+    .ba-row { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding:6px 0; }
+    .ba-row:last-child { border-bottom:none; }
+    .ba-field { color:var(--muted); font-size:12px; }
+    .ba-val-bad  { color:var(--danger); font-weight:700; }
+    .ba-val-good { color:var(--accent3); font-weight:700; }
+
+    /* SKILLS */
+    .skills-wrap { display:flex; flex-wrap:wrap; gap:10px; }
+    .skill-pill { background:var(--panel); border:1.5px solid var(--border); border-radius:6px; padding:8px 16px; font-size:13px; font-weight:500; color:var(--text); display:flex; align-items:center; gap:8px; box-shadow:var(--shadow); transition:all 0.15s; }
+    .skill-pill:hover { border-color:var(--accent); transform:translateY(-1px); }
+
+    /* FOOTER */
+    footer { position:relative; z-index:1; border-top:1.5px solid var(--border); padding:2.5rem 8vw; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; background:var(--panel); }
+    .footer-left { font-family:var(--mono); font-size:12px; color:var(--muted); }
+    .footer-left strong { color:var(--accent); }
+    .footer-links { display:flex; gap:1.5rem; }
+    .footer-links a { font-family:var(--mono); font-size:12px; color:var(--muted); text-decoration:none; transition:color 0.2s; }
+    .footer-links a:hover { color:var(--accent); }
+
+    /* ANIM */
+    @keyframes fadeUp { from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);} }
+    @keyframes pulse { 0%,100%{opacity:0.3;}50%{opacity:1;} }
+    .live { display:inline-flex; align-items:center; gap:6px; }
+    .live::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--accent3); animation:pulse 2s ease infinite; }
+
+    @media(max-width:768px) {
+      section { padding:4rem 5vw; }
+      .ba-grid { grid-template-columns:1fr; }
+      .audit-grid { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="eyebrow">Home Lab Project — Part 05</div>
+  <h1>Account Lockout<br><em>&amp; Audit Policy</em></h1>
+  <p class="hero-desc">
+    Implementing enterprise-grade security auditing, account lockout policies, event log
+    investigation, security incident simulation, and automated reporting on Windows Server
+    2022 — simulating real IT security operations and compliance monitoring.
+  </p>
+  <div class="badge-row">
+    <span class="badge badge-green"><span class="live">Complete</span></span>
+    <span class="badge badge-red">Windows Server 2022</span>
+    <span class="badge badge-red">Security Audit</span>
+    <span class="badge badge-red">Account Lockout</span>
+    <span class="badge badge-amber">Event Log Analysis</span>
+  </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- ENVIRONMENT -->
+<section>
+  <div class="sec-eyebrow">Lab Setup</div>
+  <h2>Environment</h2>
+  <div class="table-wrap">
+    <table class="env-table">
+      <tr><td>Domain Controller</td><td>WIN-6ARV79FMB48 — Windows Server 2022</td></tr>
+      <tr><td>Client Machine</td><td>CPC-NSimon-001 — Windows 10 Pro</td></tr>
+      <tr><td>Domain</td><td>mylab.local</td></tr>
+      <tr><td>Server IP</td><td>192.168.1.200</td></tr>
+      <tr><td>Test User</td><td>nsimon (Neil Marvin Simon)</td></tr>
+      <tr><td>Lockout Threshold</td><td>5 failed attempts</td></tr>
+      <tr><td>Lockout Duration</td><td>30 minutes</td></tr>
+    </table>
+  </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- OBJECTIVES -->
+<section>
+  <div class="sec-eyebrow">Goals</div>
+  <h2>Project Objectives</h2>
+  <div class="checklist">
+    <div class="check-item"><div class="check-icon">✓</div><span class="check-text">Perform baseline audit policy assessment</span></div>
+    <div class="check-item"><div class="check-icon">✓</div><span class="check-text">Enable comprehensive Security Audit Policies</span></div>
+    <div class="check-item"><div class="check-icon">✓</div><span class="check-text">Create Account Lockout & Audit GPO</span></div>
+    <div class="check-item"><div class="check-icon">✓</div><span class="check-text">Simulate a brute force / account lockout scenario</span></div>
+    <div class="check-item"><div class="check-icon">✓</div><span class="check-text">Investigate Event ID 4625 (Failed Login) in Security Logs</span></div>
+    <div class="check-item"><div class="check-icon">✓</div><span class="check-text">Investigate Event ID 4740 (Account Lockout) in Security Logs</span></div>
+    <div class="check-item"><div class="check-icon">✓</div><span class="check-text">Unlock locked account via PowerShell</span></div>
+    <div class="check-item"><div class="check-icon">✓</div><span class="check-text">Generate automated Security Incident Report</span></div>
+  </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- AUDIT POLICY CHANGES -->
+<div class="stripe">
+<section>
+  <div class="sec-eyebrow">Configuration</div>
+  <h2>Audit Policy Changes</h2>
+  <div class="audit-grid">
+    <div class="audit-card">
+      <div class="audit-header"><span class="audit-icon">🔑</span><span class="audit-title">Logon Events</span></div>
+      <div class="audit-body">
+        <div class="audit-before">Before: Success only</div>
+        <div class="audit-after">✓ After: Success and Failure</div>
+      </div>
+    </div>
+    <div class="audit-card">
+      <div class="audit-header"><span class="audit-icon">🔒</span><span class="audit-title">Account Lockout</span></div>
+      <div class="audit-body">
+        <div class="audit-before">Before: Success only</div>
+        <div class="audit-after">✓ After: Success and Failure</div>
+      </div>
+    </div>
+    <div class="audit-card">
+      <div class="audit-header"><span class="audit-icon">👥</span><span class="audit-title">Security Group Mgmt</span></div>
+      <div class="audit-body">
+        <div class="audit-before">Before: Success only</div>
+        <div class="audit-after">✓ After: Success and Failure</div>
+      </div>
+    </div>
+    <div class="audit-card">
+      <div class="audit-header"><span class="audit-icon">👤</span><span class="audit-title">User Account Mgmt</span></div>
+      <div class="audit-body">
+        <div class="audit-before">Before: Success only</div>
+        <div class="audit-after">✓ After: Success and Failure</div>
+      </div>
+    </div>
+    <div class="audit-card">
+      <div class="audit-header"><span class="audit-icon">⚡</span><span class="audit-title">Sensitive Privilege Use</span></div>
+      <div class="audit-body">
+        <div class="audit-before">Before: No Auditing</div>
+        <div class="audit-after">✓ After: Success and Failure</div>
+      </div>
+    </div>
+    <div class="audit-card">
+      <div class="audit-header"><span class="audit-icon">⚙️</span><span class="audit-title">Process Creation</span></div>
+      <div class="audit-body">
+        <div class="audit-before">Before: No Auditing</div>
+        <div class="audit-after">✓ After: Success and Failure</div>
+      </div>
+    </div>
+    <div class="audit-card">
+      <div class="audit-header"><span class="audit-icon">🔐</span><span class="audit-title">Credential Validation</span></div>
+      <div class="audit-body">
+        <div class="audit-before">Before: Success only</div>
+        <div class="audit-after">✓ After: Success and Failure</div>
+      </div>
+    </div>
+    <div class="audit-card">
+      <div class="audit-header"><span class="audit-icon">📁</span><span class="audit-title">File System Access</span></div>
+      <div class="audit-body">
+        <div class="audit-before">Before: No Auditing</div>
+        <div class="audit-after">✓ After: Success and Failure</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="code-block" style="margin-top:2rem;">
+    <div class="code-header"><span class="code-lang">PowerShell — Enable Audit Policies</span><div class="code-dots"><span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span></div></div>
+    <pre><span class="var">auditpol</span> /set /subcategory:<span class="str">"Logon"</span>                   /success:enable /failure:enable
+<span class="var">auditpol</span> /set /subcategory:<span class="str">"Account Lockout"</span>          /success:enable /failure:enable
+<span class="var">auditpol</span> /set /subcategory:<span class="str">"User Account Management"</span>  /success:enable /failure:enable
+<span class="var">auditpol</span> /set /subcategory:<span class="str">"Security Group Management"</span>/success:enable /failure:enable
+<span class="var">auditpol</span> /set /subcategory:<span class="str">"Sensitive Privilege Use"</span>   /success:enable /failure:enable
+<span class="var">auditpol</span> /set /subcategory:<span class="str">"Process Creation"</span>         /success:enable /failure:enable
+<span class="var">auditpol</span> /set /subcategory:<span class="str">"Credential Validation"</span>    /success:enable /failure:enable
+<span class="var">auditpol</span> /set /subcategory:<span class="str">"File System"</span>              /success:enable /failure:enable</pre>
+  </div>
+</section>
+</div>
+
+<hr class="divider"/>
+
+<!-- INCIDENT SIMULATION -->
+<section>
+  <div class="sec-eyebrow">Security Incident</div>
+  <h2>Lockout Simulation & Investigation</h2>
+
+  <div class="warn-box">
+    <div class="warn-label">⚠️ SIMULATED INCIDENT</div>
+    nsimon attempted login with wrong password 5+ times from CPC-NSIMON-001<br/>
+    Account locked at: 5/2/2026 8:49:23 PM<br/>
+    Error shown: "The referenced account is currently locked out and may not be logged on to."
+  </div>
+
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">PowerShell — Investigate Event Logs</span><div class="code-dots"><span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span></div></div>
+    <pre><span class="cm"># Query failed login attempts — Event ID 4625</span>
+<span class="var">Get-WinEvent</span> -FilterHashtable @{
+    LogName = <span class="str">'Security'</span>
+    Id = <span class="val">4625</span>
+} -MaxEvents <span class="val">10</span> | Select-Object TimeCreated, Message | Format-List
+
+<span class="cm"># Query account lockout events — Event ID 4740</span>
+<span class="var">Get-WinEvent</span> -FilterHashtable @{
+    LogName = <span class="str">'Security'</span>
+    Id = <span class="val">4740</span>
+} -MaxEvents <span class="val">5</span> | Select-Object TimeCreated, Message | Format-List</pre>
+  </div>
+
+  <div class="warn-box" style="border-color:rgba(180,83,9,0.3); background:rgba(180,83,9,0.05); color:var(--warn);">
+    <div class="warn-label" style="color:var(--warn);">⚠️ SUSPICIOUS ACTIVITY FOUND IN LOGS</div>
+    4/21/2026 — Administrator login failed from 192.168.1.9 (unknown device)<br/>
+    4/20/2026 — "Admin" account attempted from LAPTOP-LTHTJPHB (192.168.1.8)<br/>
+    4/20/2026 — jdicay attempted unauthorized RDP access from 192.168.1.9<br/>
+    5/2/2026  — nsimon locked out from CPC-NSIMON-001 (simulated) 🔒
+  </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- ACCOUNT UNLOCK -->
+<div class="stripe">
+<section>
+  <div class="sec-eyebrow">Resolution</div>
+  <h2>Account Unlock Process</h2>
+
+  <div class="ba-grid">
+    <div class="ba-card">
+      <div class="ba-header before">🔴 Before Unlock</div>
+      <div class="ba-body">
+        <div class="ba-row"><span class="ba-field">Name</span><span class="ba-val-bad">Neil Marvin Simon</span></div>
+        <div class="ba-row"><span class="ba-field">LockedOut</span><span class="ba-val-bad">True</span></div>
+        <div class="ba-row"><span class="ba-field">BadLogonCount</span><span class="ba-val-bad">5</span></div>
+        <div class="ba-row"><span class="ba-field">LastBadAttempt</span><span class="ba-val-bad">5/2/2026 8:49 PM</span></div>
+      </div>
+    </div>
+    <div class="ba-card">
+      <div class="ba-header after">✅ After Unlock</div>
+      <div class="ba-body">
+        <div class="ba-row"><span class="ba-field">Name</span><span class="ba-val-good">Neil Marvin Simon</span></div>
+        <div class="ba-row"><span class="ba-field">LockedOut</span><span class="ba-val-good">False</span></div>
+        <div class="ba-row"><span class="ba-field">BadLogonCount</span><span class="ba-val-good">0</span></div>
+        <div class="ba-row"><span class="ba-field">Status</span><span class="ba-val-good">Active ✅</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="code-block" style="margin-top:2rem;">
+    <div class="code-header"><span class="code-lang">PowerShell — Unlock Account</span><div class="code-dots"><span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span></div></div>
+    <pre><span class="cm"># Check lockout status</span>
+<span class="var">Get-ADUser</span> -Identity <span class="str">"nsimon"</span> `
+  -Properties LockedOut, BadLogonCount, LastBadPasswordAttempt |
+  Select-Object Name, LockedOut, BadLogonCount, LastBadPasswordAttempt
+
+<span class="cm"># Unlock the account</span>
+<span class="var">Unlock-ADAccount</span> -Identity <span class="str">"nsimon"</span>
+
+<span class="cm"># Verify it's unlocked</span>
+<span class="var">Get-ADUser</span> -Identity <span class="str">"nsimon"</span> -Properties LockedOut |
+  Select-Object Name, LockedOut</pre>
+  </div>
+</section>
+</div>
+
+<hr class="divider"/>
+
+<!-- HELPDESK WORKFLOW -->
+<section>
+  <div class="sec-eyebrow">Process</div>
+  <h2>Helpdesk Resolution Workflow</h2>
+  <div class="workflow">
+    <div class="wf-step">
+      <div class="wf-left"><div class="wf-num">1</div><div class="wf-line"></div></div>
+      <div class="wf-content">
+        <div class="wf-title">User Reports Issue</div>
+        <div class="wf-desc">"I can't log into my computer!" — User calls helpdesk after being locked out.</div>
+      </div>
+    </div>
+    <div class="wf-step">
+      <div class="wf-left"><div class="wf-num">2</div><div class="wf-line"></div></div>
+      <div class="wf-content">
+        <div class="wf-title">Investigate Event Logs (Event ID 4740)</div>
+        <div class="wf-desc">IT checks Security Event Log to confirm the lockout and see where it originated — CPC-NSIMON-001 at 8:49 PM.</div>
+      </div>
+    </div>
+    <div class="wf-step">
+      <div class="wf-left"><div class="wf-num">3</div><div class="wf-line"></div></div>
+      <div class="wf-content">
+        <div class="wf-title">Analyze Failed Attempts (Event ID 4625)</div>
+        <div class="wf-desc">Check how many attempts, from which device, and whether it looks like genuine user error or a malicious attack.</div>
+      </div>
+    </div>
+    <div class="wf-step">
+      <div class="wf-left"><div class="wf-num">4</div><div class="wf-line"></div></div>
+      <div class="wf-content">
+        <div class="wf-title">Verify User Identity</div>
+        <div class="wf-desc">"Can you confirm your employee ID and department?" — Always verify before unlocking.</div>
+      </div>
+    </div>
+    <div class="wf-step">
+      <div class="wf-left"><div class="wf-num">5</div><div class="wf-line"></div></div>
+      <div class="wf-content">
+        <div class="wf-title">Unlock Account</div>
+        <div class="wf-desc">Run Unlock-ADAccount -Identity "nsimon" from WinServer2022 PowerShell.</div>
+      </div>
+    </div>
+    <div class="wf-step">
+      <div class="wf-left"><div class="wf-num">6</div><div class="wf-line"></div></div>
+      <div class="wf-content">
+        <div class="wf-title">Document & Close Ticket</div>
+        <div class="wf-desc">Generate security report, advise user to change password, document the incident, close the ticket. ✅</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- EVENT ID REFERENCE -->
+<div class="stripe">
+<section>
+  <div class="sec-eyebrow">Reference</div>
+  <h2>Security Event ID Reference</h2>
+  <div class="table-wrap">
+    <table class="event-table">
+      <thead><tr><th>Event ID</th><th>Description</th><th>Severity</th><th>Action Required</th></tr></thead>
+      <tbody>
+        <tr><td><span class="event-id">4624</span></td><td>Successful login</td><td><span class="sev-info">INFO</span></td><td>Monitor for unusual times/locations</td></tr>
+        <tr><td><span class="event-id">4625</span></td><td>Failed login attempt</td><td><span class="sev-warn">WARNING</span></td><td>Investigate if repeated from same IP</td></tr>
+        <tr><td><span class="event-id">4740</span></td><td>Account locked out</td><td><span class="sev-high">HIGH</span></td><td>Investigate source, verify user, unlock</td></tr>
+        <tr><td><span class="event-id">4767</span></td><td>Account unlocked</td><td><span class="sev-info">INFO</span></td><td>Verify IT admin performed unlock</td></tr>
+        <tr><td><span class="event-id">4720</span></td><td>User account created</td><td><span class="sev-info">INFO</span></td><td>Verify authorized IT admin created it</td></tr>
+        <tr><td><span class="event-id">4726</span></td><td>User account deleted</td><td><span class="sev-high">HIGH</span></td><td>Immediate investigation required</td></tr>
+        <tr><td><span class="event-id">4648</span></td><td>Logon with explicit credentials</td><td><span class="sev-warn">WARNING</span></td><td>Monitor for credential theft indicators</td></tr>
+        <tr><td><span class="event-id">4719</span></td><td>Audit policy changed</td><td><span class="sev-high">HIGH</span></td><td>Verify authorized change was made</td></tr>
+        <tr><td><span class="event-id">4728</span></td><td>User added to security group</td><td><span class="sev-warn">WARNING</span></td><td>Verify authorized group membership change</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+</div>
+
+<hr class="divider"/>
+
+<!-- SKILLS -->
+<section>
+  <div class="sec-eyebrow">Takeaways</div>
+  <h2>Skills Demonstrated</h2>
+  <div class="skills-wrap">
+    <div class="skill-pill"><span>🔍</span> Security Audit Policy Configuration</div>
+    <div class="skill-pill"><span>🔒</span> Account Lockout Policy</div>
+    <div class="skill-pill"><span>📋</span> Event Log Analysis</div>
+    <div class="skill-pill"><span>🎭</span> Security Incident Simulation</div>
+    <div class="skill-pill"><span>🔓</span> Account Unlock via PowerShell</div>
+    <div class="skill-pill"><span>📊</span> Security Report Generation</div>
+    <div class="skill-pill"><span>🚨</span> Threat Detection</div>
+    <div class="skill-pill"><span>🎯</span> Helpdesk Incident Resolution</div>
+    <div class="skill-pill"><span>💻</span> PowerShell Security Automation</div>
+    <div class="skill-pill"><span>📝</span> Compliance Documentation</div>
+  </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-left">
+    Home Lab — Part 05 &nbsp;|&nbsp; <strong>Account Lockout & Audit Policy</strong> &nbsp;|&nbsp; Built by Neil Marvin Simon
+  </div>
+  <div class="footer-links">
+    <a href="#">Part 01 — DNS & DHCP →</a>
+    <a href="#">Part 02 — Win10 Client & AD →</a>
+    <a href="#">Part 03 — GPO →</a>
+    <a href="#">Part 04 — File Server →</a>
+  </div>
+</footer>
+
+</body>
+</html>
